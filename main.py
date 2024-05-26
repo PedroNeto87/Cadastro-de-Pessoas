@@ -1,4 +1,7 @@
 import sys
+import requests
+import os
+import shutil
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QDialog, QTableWidgetItem
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.uic import loadUi
@@ -12,15 +15,51 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
+    GITHUB_API_URL = "https://api.github.com/repos/PedroNeto87/CadastroPessoas/releases/latest"
+    LOCAL_EXECUTABLE_DIR = "C:\\Program Files (x86)\\Cadastro de Pessoas"
+    LOCAL_EXECUTABLE_PATH = os.path.join(LOCAL_EXECUTABLE_DIR, "main.exe")
+    EXECUTABLE_NAME = "main.exe"
+
     def __init__(self):
         super(MainWindow, self).__init__()
         self.setupUi(self)
+
+        self.check_for_updates()
 
         self.txt_cpf.editingFinished.connect(self.verificarCpf)
         self.txt_cep.editingFinished.connect(self.consultarApi)
         self.btn_salvar.clicked.connect(self.cadastrarPessoa)
         self.btn_cadastros.clicked.connect(self.telaTabela)
 
+    def get_latest_release_info(self):
+        response = requests.get(self.GITHUB_API_URL)
+        response.raise_for_status()
+        return response.json()
+
+    def download_latest_executable(self, download_url, local_path):
+        if not os.path.exists(self.LOCAL_EXECUTABLE_DIR):
+            os.makedirs(self.LOCAL_EXECUTABLE_DIR)
+
+        with requests.get(download_url, stream=True) as r:
+            r.raise_for_status()
+            with open(local_path, 'wb') as f:
+                shutil.copyfileobj(r.raw, f)
+
+    def check_for_updates(self):
+        try:
+            latest_release = self.get_latest_release_info()
+            latest_version = latest_release["tag_name"]
+            assets = latest_release["assets"]
+            for asset in assets:
+                if asset["name"] == self.EXECUTABLE_NAME:
+                    download_url = asset["browser_download_url"]
+                    QMessageBox.information(self, "Atualização Encontrada", f"Nova versão disponível: {latest_version} Baixando...")
+                    self.download_latest_executable(download_url, self.LOCAL_EXECUTABLE_PATH)
+                    QMessageBox.information(self, "Atualização Concluída", "Atualização concluída. Por favor, reinicie o aplicativo.")
+                    return
+            QMessageBox.information(self, "Sem Atualizações", "Nenhuma nova versão encontrada.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao verificar atualizações: {e}")
 
     def verificarCpf(self):
         cpf = self.txt_cpf.text()
